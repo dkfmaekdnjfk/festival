@@ -6,6 +6,7 @@ export interface Session {
   speaker: string
   session_type: string
   group: string
+  session_date: string   // YYYY-MM-DD, user-chosen date
   created_at: string
   started_at: string
   ended_at?: string

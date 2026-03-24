@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react'
 import {
   getSessions,
@@ -8,6 +9,8 @@ import {
   type Session,
   type Schedule,
 } from '../lib/api'
+import { useAppStore } from '../store/appStore'
+import { StartSessionModal } from './Dashboard'
 
 // ---------------------------------------------------------------------------
 // Palette helpers
@@ -115,6 +118,8 @@ function GroupBadge({ group }: { group: string }) {
 // ---------------------------------------------------------------------------
 
 export function CalendarPage() {
+  const navigate = useNavigate()
+  const { setSessionInfo, setSessionId, resetSession } = useAppStore()
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -124,6 +129,7 @@ export function CalendarPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<ScheduleFormState>(emptyForm())
   const [submitting, setSubmitting] = useState(false)
+  const [showSessionModal, setShowSessionModal] = useState(false)
 
   // Load sessions + schedules
   useEffect(() => {
@@ -140,8 +146,9 @@ export function CalendarPage() {
   // ---------------------------------------------------------------------------
 
   // Map of YMD -> sessions[]
+  // Prefer session_date (user-chosen) over started_at/created_at
   const sessionsByDate = sessions.reduce<Record<string, Session[]>>((acc, s) => {
-    const raw = s.started_at || s.created_at || ''
+    const raw = s.session_date || s.started_at || s.created_at || ''
     if (!raw) return acc
     const ymd = raw.slice(0, 10)
     if (!acc[ymd]) acc[ymd] = []
@@ -299,13 +306,22 @@ export function CalendarPage() {
 
           {/* ---- Selected day panel ---- */}
           <div className="w-72 shrink-0 bg-surface border border-border rounded-2xl p-5 space-y-4">
-            <p className="text-sm font-semibold text-text">
-              {new Date(selectedYMD + 'T00:00:00').toLocaleDateString('ko-KR', {
-                month: 'long',
-                day: 'numeric',
-                weekday: 'short',
-              })}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-text">
+                {new Date(selectedYMD + 'T00:00:00').toLocaleDateString('ko-KR', {
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'short',
+                })}
+              </p>
+              <button
+                onClick={() => setShowSessionModal(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium transition-colors"
+              >
+                <Plus size={12} />
+                세션
+              </button>
+            </div>
 
             {/* Sessions of the day */}
             <div>
@@ -502,6 +518,22 @@ export function CalendarPage() {
           )}
         </div>
       </div>
+
+      {/* Session start modal — pre-filled with selected date */}
+      {showSessionModal && (
+        <StartSessionModal
+          initialDate={selectedYMD}
+          onClose={() => setShowSessionModal(false)}
+          onStart={(title, speaker, type, group, date) => {
+            resetSession()
+            setSessionInfo(title, speaker, type, group, date)
+            const tempId = `session_${Date.now()}`
+            setSessionId(tempId)
+            setShowSessionModal(false)
+            navigate('/session')
+          }}
+        />
+      )}
     </div>
   )
 }

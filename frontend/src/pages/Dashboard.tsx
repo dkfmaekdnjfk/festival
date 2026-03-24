@@ -7,12 +7,18 @@ import { formatDate, truncate } from '../lib/utils'
 
 const SESSION_TYPES = ['수업', '세미나', '학회', '강연']
 
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 function StartSessionModal({
   onClose,
   onStart,
+  initialDate,
 }: {
   onClose: () => void
-  onStart: (title: string, speaker: string, type: string, group: string) => void
+  onStart: (title: string, speaker: string, type: string, group: string, date: string) => void
+  initialDate?: string
 }) {
   const { settings } = useAppStore()
   const [title, setTitle] = useState('')
@@ -20,6 +26,7 @@ function StartSessionModal({
   const [sessionType, setSessionType] = useState(settings.defaultSessionType || '수업')
   const [group, setGroup] = useState('')
   const [existingGroups, setExistingGroups] = useState<string[]>([])
+  const [date, setDate] = useState(initialDate ?? todayStr())
 
   useEffect(() => {
     getGroups()
@@ -30,7 +37,7 @@ function StartSessionModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-    onStart(title.trim(), speaker.trim(), sessionType, group.trim())
+    onStart(title.trim(), speaker.trim(), sessionType, group.trim(), date)
   }
 
   return (
@@ -97,6 +104,30 @@ function StartSessionModal({
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Date picker */}
+          <div className="block">
+            <span className="text-xs text-text-muted mb-1.5 block">날짜</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setDate(todayStr())}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  date === todayStr()
+                    ? 'border-primary bg-primary/15 text-primary'
+                    : 'border-border text-text-muted hover:border-primary/40 hover:text-text'
+                }`}
+              >
+                오늘
+              </button>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="flex-1 bg-surface-elevated border border-border rounded-lg px-3 py-1.5 text-xs text-text focus:outline-none focus:border-primary/60 transition-colors"
+              />
+            </div>
           </div>
 
           <label className="block">
@@ -184,9 +215,9 @@ export function Dashboard() {
       .finally(() => setLoadingHistory(false))
   }, [])
 
-  const handleStart = (title: string, speaker: string, type: string, group: string) => {
+  const handleStart = (title: string, speaker: string, type: string, group: string, date: string) => {
     resetSession()
-    setSessionInfo(title, speaker, type, group)
+    setSessionInfo(title, speaker, type, group, date)
     // Generate a temporary session ID — backend will assign the real one via WS
     const tempId = `session_${Date.now()}`
     setSessionId(tempId)
@@ -266,4 +297,4 @@ export function Dashboard() {
   )
 }
 
-export { truncate }
+export { truncate, StartSessionModal }

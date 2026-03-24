@@ -66,6 +66,7 @@ interface AppStore {
   sessionSpeaker: string
   sessionType: string
   sessionGroup: string
+  sessionDate: string    // YYYY-MM-DD
   transcript: string
   interimTranscript: string
   concepts: Concept[]
@@ -76,7 +77,7 @@ interface AppStore {
   agentStatus: string
 
   // Actions
-  setSessionInfo: (title: string, speaker: string, type: string, group: string) => void
+  setSessionInfo: (title: string, speaker: string, type: string, group: string, date?: string) => void
   setSessionId: (id: string) => void
   startSession: () => void
   endSession: () => void
@@ -116,6 +117,7 @@ export const useAppStore = create<AppStore>()(
       sessionSpeaker: '',
       sessionType: '수업',
       sessionGroup: '',
+      sessionDate: new Date().toISOString().slice(0, 10),
       transcript: '',
       interimTranscript: '',
       concepts: [],
@@ -126,8 +128,14 @@ export const useAppStore = create<AppStore>()(
       agentStatus: '',
 
       // Actions
-      setSessionInfo: (title, speaker, type, group) =>
-        set({ sessionTitle: title, sessionSpeaker: speaker, sessionType: type, sessionGroup: group }),
+      setSessionInfo: (title, speaker, type, group, date) =>
+        set({
+          sessionTitle: title,
+          sessionSpeaker: speaker,
+          sessionType: type,
+          sessionGroup: group,
+          sessionDate: date ?? new Date().toISOString().slice(0, 10),
+        }),
 
       setSessionId: (id) => set({ sessionId: id }),
 
@@ -214,6 +222,7 @@ export const useAppStore = create<AppStore>()(
           sessionSpeaker: '',
           sessionType: get().settings.defaultSessionType || '수업',
           sessionGroup: '',
+          sessionDate: new Date().toISOString().slice(0, 10),
           transcript: '',
           interimTranscript: '',
           concepts: [],

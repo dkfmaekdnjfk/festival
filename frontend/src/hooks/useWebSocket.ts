@@ -52,6 +52,7 @@ export function useWebSocket(sessionId: string | null): UseWebSocketReturn {
             speaker: s.sessionSpeaker,
             session_type: s.sessionType,
             group: s.sessionGroup,
+            session_date: s.sessionDate,
             api_key: s.settings.apiKey,
             provider: s.settings.provider,
             model: s.settings.model || undefined,

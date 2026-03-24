@@ -209,6 +209,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 speaker = message.get("speaker", "Unknown")
                 session_type = message.get("session_type", "Lecture")
                 group = message.get("group", "")
+                session_date = message.get("session_date", "")
 
                 session_service.create_session(
                     session_id=session_id,
@@ -216,6 +217,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     speaker=speaker,
                     session_type=session_type,
                     group=group,
+                    session_date=session_date,
                 )
 
                 await send({"type": "status", "message": f"Session '{title}' started"})

@@ -12,14 +12,18 @@ class SessionService:
         speaker: str,
         session_type: str,
         group: str = "",
+        session_date: str = "",
     ) -> dict:
+        now = datetime.now()
         session = {
             "id": session_id,
             "title": title,
             "speaker": speaker,
             "session_type": session_type,
             "group": group,
-            "started_at": datetime.now().isoformat(),
+            # session_date: user-chosen date (YYYY-MM-DD). Falls back to today.
+            "session_date": session_date if session_date else now.strftime("%Y-%m-%d"),
+            "started_at": now.isoformat(),
             "ended_at": None,
             "transcript": "",
             "transcript_chunks": [],
