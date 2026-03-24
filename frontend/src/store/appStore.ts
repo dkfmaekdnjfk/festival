@@ -65,6 +65,7 @@ interface AppStore {
   sessionTitle: string
   sessionSpeaker: string
   sessionType: string
+  sessionGroup: string
   transcript: string
   interimTranscript: string
   concepts: Concept[]
@@ -75,7 +76,7 @@ interface AppStore {
   agentStatus: string
 
   // Actions
-  setSessionInfo: (title: string, speaker: string, type: string) => void
+  setSessionInfo: (title: string, speaker: string, type: string, group: string) => void
   setSessionId: (id: string) => void
   startSession: () => void
   endSession: () => void
@@ -114,6 +115,7 @@ export const useAppStore = create<AppStore>()(
       sessionTitle: '',
       sessionSpeaker: '',
       sessionType: '수업',
+      sessionGroup: '',
       transcript: '',
       interimTranscript: '',
       concepts: [],
@@ -124,8 +126,8 @@ export const useAppStore = create<AppStore>()(
       agentStatus: '',
 
       // Actions
-      setSessionInfo: (title, speaker, type) =>
-        set({ sessionTitle: title, sessionSpeaker: speaker, sessionType: type }),
+      setSessionInfo: (title, speaker, type, group) =>
+        set({ sessionTitle: title, sessionSpeaker: speaker, sessionType: type, sessionGroup: group }),
 
       setSessionId: (id) => set({ sessionId: id }),
 
@@ -211,6 +213,7 @@ export const useAppStore = create<AppStore>()(
           sessionTitle: '',
           sessionSpeaker: '',
           sessionType: get().settings.defaultSessionType || '수업',
+          sessionGroup: '',
           transcript: '',
           interimTranscript: '',
           concepts: [],

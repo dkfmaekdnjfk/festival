@@ -5,7 +5,9 @@ export interface Session {
   title: string
   speaker: string
   session_type: string
+  group: string
   created_at: string
+  started_at: string
   ended_at?: string
   status: 'active' | 'ended'
   summary?: {
@@ -14,6 +16,17 @@ export interface Session {
     unclear_points: string[]
     review_questions: { question: string; answer: string }[]
   }
+}
+
+export interface Schedule {
+  id: string
+  title: string
+  group: string
+  speaker: string
+  session_type: string
+  day_of_week: number
+  time: string
+  created_at: string
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -30,6 +43,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export async function getHealth(): Promise<{ status: string }> {
   return request<{ status: string }>('/health')
+}
+
+export async function getEnvKeys(): Promise<Record<string, boolean>> {
+  return request<Record<string, boolean>>('/env-keys')
 }
 
 export async function getSessions(): Promise<Session[]> {
@@ -62,4 +79,23 @@ export async function createSession(data: {
     method: 'POST',
     body: JSON.stringify(data),
   })
+}
+
+export async function getGroups(): Promise<string[]> {
+  return request<string[]>('/groups')
+}
+
+export async function getSchedules(): Promise<Schedule[]> {
+  return request<Schedule[]>('/schedules')
+}
+
+export async function createSchedule(data: Omit<Schedule, 'id' | 'created_at'>): Promise<Schedule> {
+  return request<Schedule>('/schedules', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteSchedule(id: string): Promise<void> {
+  return request<void>(`/schedules/${id}`, { method: 'DELETE' })
 }

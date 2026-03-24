@@ -11,12 +11,14 @@ class SessionService:
         title: str,
         speaker: str,
         session_type: str,
+        group: str = "",
     ) -> dict:
         session = {
             "id": session_id,
             "title": title,
             "speaker": speaker,
             "session_type": session_type,
+            "group": group,
             "started_at": datetime.now().isoformat(),
             "ended_at": None,
             "transcript": "",

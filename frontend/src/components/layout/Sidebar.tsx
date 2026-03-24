@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Mic, BookOpen, Settings2 } from 'lucide-react'
+import { Home, Mic, BookOpen, Calendar, Settings2 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import { cn } from '../../lib/utils'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Dashboard' },
   { to: '/session', icon: Mic, label: 'Session' },
+  { to: '/calendar', icon: Calendar, label: 'Calendar' },
   { to: '/history', icon: BookOpen, label: 'History' },
   { to: '/settings', icon: Settings2, label: 'Settings' },
 ]

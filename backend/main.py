@@ -2,6 +2,7 @@ import json
 import os
 import uuid
 import asyncio
+from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -42,6 +43,8 @@ app.add_middleware(
 
 session_service = SessionService()
 
+_schedules: dict[str, dict] = {}
+
 
 # ---------------------------------------------------------------------------
 # REST endpoints
@@ -53,9 +56,73 @@ async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/env-keys")
+async def env_keys():
+    """Return which providers have an API key configured in the environment."""
+    return {
+        provider: bool(key)
+        for provider, key in _ENV_API_KEYS.items()
+    }
+
+
 @app.get("/sessions")
 async def list_sessions():
-    return JSONResponse(content=list(session_service.sessions.values()))
+    sessions = []
+    for s in session_service.sessions.values():
+        serialized = dict(s)
+        serialized["created_at"] = s.get("started_at", "")
+        sessions.append(serialized)
+    return JSONResponse(content=sessions)
+
+
+@app.get("/groups")
+async def list_groups():
+    """Return all unique groups from existing sessions."""
+    groups = sorted({
+        s.get("group", "")
+        for s in session_service.sessions.values()
+        if s.get("group", "")
+    })
+    return groups
+
+
+class ScheduleCreate(BaseModel):
+    title: str
+    group: str = ""
+    speaker: str = ""
+    session_type: str = "수업"
+    day_of_week: int  # 0=Mon, 6=Sun
+    time: str = ""  # "HH:MM"
+
+
+@app.get("/schedules")
+async def list_schedules():
+    return list(_schedules.values())
+
+
+@app.post("/schedules")
+async def create_schedule(body: ScheduleCreate):
+    schedule_id = str(uuid.uuid4())
+    schedule = {
+        "id": schedule_id,
+        "title": body.title,
+        "group": body.group,
+        "speaker": body.speaker,
+        "session_type": body.session_type,
+        "day_of_week": body.day_of_week,
+        "time": body.time,
+        "created_at": datetime.now().isoformat(),
+    }
+    _schedules[schedule_id] = schedule
+    return schedule
+
+
+@app.delete("/schedules/{schedule_id}")
+async def delete_schedule(schedule_id: str):
+    if schedule_id not in _schedules:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    del _schedules[schedule_id]
+    return {"ok": True}
 
 
 @app.get("/sessions/{session_id}")
@@ -141,12 +208,14 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 title = message.get("title", "Untitled Lecture")
                 speaker = message.get("speaker", "Unknown")
                 session_type = message.get("session_type", "Lecture")
+                group = message.get("group", "")
 
                 session_service.create_session(
                     session_id=session_id,
                     title=title,
                     speaker=speaker,
                     session_type=session_type,
+                    group=group,
                 )
 
                 await send({"type": "status", "message": f"Session '{title}' started"})

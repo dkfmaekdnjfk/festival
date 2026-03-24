@@ -3,11 +3,61 @@ import { Clock, User, Tag } from 'lucide-react'
 import { getSessions, type Session } from '../lib/api'
 import { formatDate } from '../lib/utils'
 
+const PALETTE = [
+  { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30', dot: 'bg-blue-400' },
+  { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30', dot: 'bg-purple-400' },
+  { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/30', dot: 'bg-emerald-400' },
+  { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/30', dot: 'bg-orange-400' },
+  { bg: 'bg-pink-500/20', text: 'text-pink-400', border: 'border-pink-500/30', dot: 'bg-pink-400' },
+  { bg: 'bg-cyan-500/20', text: 'text-cyan-400', border: 'border-cyan-500/30', dot: 'bg-cyan-400' },
+]
+
+function getGroupPalette(group: string) {
+  if (!group) return PALETTE[0]
+  let h = 0
+  for (const c of group) h = (h * 31 + c.charCodeAt(0)) & 0xffff
+  return PALETTE[h % PALETTE.length]
+}
+
+function groupSessionsByDate(sessions: Session[]): { dateLabel: string; sessions: Session[] }[] {
+  const map = new Map<string, Session[]>()
+  for (const s of sessions) {
+    const raw = s.started_at || s.created_at || ''
+    const dateKey = raw ? raw.slice(0, 10) : '날짜 없음'
+    if (!map.has(dateKey)) map.set(dateKey, [])
+    map.get(dateKey)!.push(s)
+  }
+  const sorted = Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]))
+  return sorted.map(([dateKey, list]) => ({
+    dateLabel: dateKey === '날짜 없음' ? dateKey : formatDateLabel(dateKey),
+    sessions: list,
+  }))
+}
+
+function formatDateLabel(dateKey: string): string {
+  const d = new Date(dateKey)
+  if (isNaN(d.getTime())) return dateKey
+  return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })
+}
+
+function GroupBadge({ group }: { group: string }) {
+  if (!group) return null
+  const p = getGroupPalette(group)
+  return (
+    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${p.bg} ${p.text} ${p.border}`}>
+      {group}
+    </span>
+  )
+}
+
 function SessionRow({ session }: { session: Session }) {
   return (
     <div className="flex items-center justify-between p-4 bg-surface border border-border rounded-xl hover:border-primary/30 transition-colors">
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-text mb-1">{session.title}</p>
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <p className="text-sm font-medium text-text">{session.title}</p>
+          {session.group && <GroupBadge group={session.group} />}
+        </div>
         <div className="flex items-center gap-4 flex-wrap">
           {session.speaker && (
             <span className="flex items-center gap-1 text-xs text-text-muted">
@@ -26,7 +76,7 @@ function SessionRow({ session }: { session: Session }) {
         </div>
       </div>
       <span
-        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
+        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ml-3 ${
           session.status === 'active'
             ? 'border-success/30 text-success bg-success/10'
             : 'border-border text-text-subtle'
@@ -42,6 +92,7 @@ export function SessionHistory() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeGroup, setActiveGroup] = useState<string | null>(null)
 
   useEffect(() => {
     getSessions()
@@ -52,10 +103,47 @@ export function SessionHistory() {
       .finally(() => setLoading(false))
   }, [])
 
+  const allGroups = Array.from(new Set(sessions.map((s) => s.group).filter(Boolean))).sort()
+
+  const filtered = activeGroup ? sessions.filter((s) => s.group === activeGroup) : sessions
+
+  const grouped = groupSessionsByDate(filtered)
+
   return (
     <div className="h-full overflow-y-auto p-8">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-lg font-semibold text-text mb-8">세션 기록</h1>
+        <h1 className="text-lg font-semibold text-text mb-6">세션 기록</h1>
+
+        {/* Group filter chips */}
+        {allGroups.length > 0 && (
+          <div className="flex gap-2 flex-wrap mb-6">
+            <button
+              onClick={() => setActiveGroup(null)}
+              className={`px-3 py-1.5 rounded-full text-xs border font-medium transition-colors ${
+                activeGroup === null
+                  ? 'border-primary bg-primary/15 text-primary'
+                  : 'border-border text-text-muted hover:border-primary/40 hover:text-text'
+              }`}
+            >
+              전체
+            </button>
+            {allGroups.map((g) => {
+              const p = getGroupPalette(g)
+              const isActive = activeGroup === g
+              return (
+                <button
+                  key={g}
+                  onClick={() => setActiveGroup(isActive ? null : g)}
+                  className={`px-3 py-1.5 rounded-full text-xs border font-medium transition-colors ${
+                    isActive ? `${p.bg} ${p.text} ${p.border}` : 'border-border text-text-muted hover:border-primary/40 hover:text-text'
+                  }`}
+                >
+                  {g}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {loading && (
           <div className="space-y-2">
@@ -84,12 +172,21 @@ export function SessionHistory() {
         )}
 
         {!loading && !error && sessions.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs text-text-subtle mb-4">
-              총 {sessions.length}개의 세션
+          <div className="space-y-6">
+            <p className="text-xs text-text-subtle">
+              총 {filtered.length}개의 세션{activeGroup ? ` (${activeGroup})` : ''}
             </p>
-            {sessions.map((s) => (
-              <SessionRow key={s.id} session={s} />
+            {grouped.map(({ dateLabel, sessions: daySessions }) => (
+              <div key={dateLabel}>
+                <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+                  {dateLabel}
+                </p>
+                <div className="space-y-2">
+                  {daySessions.map((s) => (
+                    <SessionRow key={s.id} session={s} />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}

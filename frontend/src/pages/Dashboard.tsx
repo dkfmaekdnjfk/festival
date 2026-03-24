@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, X, ChevronRight, Clock, User } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
-import { getSessions, type Session } from '../lib/api'
+import { getSessions, getGroups, type Session } from '../lib/api'
 import { formatDate, truncate } from '../lib/utils'
 
 const SESSION_TYPES = ['수업', '세미나', '학회', '강연']
@@ -12,17 +12,25 @@ function StartSessionModal({
   onStart,
 }: {
   onClose: () => void
-  onStart: (title: string, speaker: string, type: string) => void
+  onStart: (title: string, speaker: string, type: string, group: string) => void
 }) {
   const { settings } = useAppStore()
   const [title, setTitle] = useState('')
   const [speaker, setSpeaker] = useState('')
   const [sessionType, setSessionType] = useState(settings.defaultSessionType || '수업')
+  const [group, setGroup] = useState('')
+  const [existingGroups, setExistingGroups] = useState<string[]>([])
+
+  useEffect(() => {
+    getGroups()
+      .then(setExistingGroups)
+      .catch(() => setExistingGroups([]))
+  }, [])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-    onStart(title.trim(), speaker.trim(), sessionType)
+    onStart(title.trim(), speaker.trim(), sessionType, group.trim())
   }
 
   return (
@@ -61,6 +69,35 @@ function StartSessionModal({
               className="w-full bg-surface-elevated border border-border rounded-lg px-3 py-2 text-sm text-text placeholder-text-subtle focus:outline-none focus:border-primary/60 transition-colors"
             />
           </label>
+
+          <div className="block">
+            <span className="text-xs text-text-muted mb-1.5 block">그룹 / 과목</span>
+            <input
+              type="text"
+              value={group}
+              onChange={(e) => setGroup(e.target.value)}
+              placeholder="예: 기계학습, 운영체제"
+              className="w-full bg-surface-elevated border border-border rounded-lg px-3 py-2 text-sm text-text placeholder-text-subtle focus:outline-none focus:border-primary/60 transition-colors"
+            />
+            {existingGroups.length > 0 && (
+              <div className="flex gap-1.5 flex-wrap mt-2">
+                {existingGroups.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGroup(g)}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                      group === g
+                        ? 'border-primary bg-primary/15 text-primary'
+                        : 'border-border text-text-muted hover:border-primary/40 hover:text-text'
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <label className="block">
             <span className="text-xs text-text-muted mb-1.5 block">세션 유형</span>
@@ -147,9 +184,9 @@ export function Dashboard() {
       .finally(() => setLoadingHistory(false))
   }, [])
 
-  const handleStart = (title: string, speaker: string, type: string) => {
+  const handleStart = (title: string, speaker: string, type: string, group: string) => {
     resetSession()
-    setSessionInfo(title, speaker, type)
+    setSessionInfo(title, speaker, type, group)
     // Generate a temporary session ID — backend will assign the real one via WS
     const tempId = `session_${Date.now()}`
     setSessionId(tempId)

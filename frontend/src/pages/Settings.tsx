@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Eye, EyeOff, Save, Check } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { PROVIDER_LABELS, DEFAULT_MODELS, API_KEY_PLACEHOLDERS, type Provider } from '../store/appStore'
+import { getEnvKeys } from '../lib/api'
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -26,6 +27,11 @@ export function Settings() {
   const [localAutoSave, setLocalAutoSave] = useState(settings.autoSave)
   const [localLanguage, setLocalLanguage] = useState(settings.language)
   const [localSessionType, setLocalSessionType] = useState(settings.defaultSessionType)
+  const [envKeys, setEnvKeys] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    getEnvKeys().then(setEnvKeys).catch(() => {})
+  }, [])
 
   const handleProviderChange = (p: Provider) => {
     setLocalProvider(p)
@@ -82,15 +88,29 @@ export function Settings() {
 
             {/* API Key */}
             <label className="block">
-              <span className="text-xs text-text-muted mb-1.5 block">
+              <span className="text-xs text-text-muted mb-1.5 flex items-center gap-2">
                 {PROVIDER_LABELS[localProvider]} API Key
+                {envKeys[localProvider] ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+                    <Check size={9} />
+                    환경변수 설정됨
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-elevated text-text-muted border border-border">
+                    미설정
+                  </span>
+                )}
               </span>
               <div className="relative">
                 <input
                   type={showApiKey ? 'text' : 'password'}
                   value={localApiKey}
                   onChange={(e) => setLocalApiKey(e.target.value)}
-                  placeholder={API_KEY_PLACEHOLDERS[localProvider]}
+                  placeholder={
+                    envKeys[localProvider]
+                      ? '환경변수 키 사용 중 (직접 입력 시 우선 적용)'
+                      : API_KEY_PLACEHOLDERS[localProvider]
+                  }
                   className="w-full bg-surface-elevated border border-border rounded-lg px-3 py-2 text-sm text-text placeholder-text-subtle focus:outline-none focus:border-primary/60 transition-colors pr-10"
                 />
                 <button
