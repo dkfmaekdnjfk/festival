@@ -31,6 +31,9 @@ frontend/.vite/
 .DS_Store
 Thumbs.db
 
+# Session data (local only)
+backend/sessions/
+
 # Logs
 *.log
 npm-debug.log*
