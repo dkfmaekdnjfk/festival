@@ -1,8 +1,10 @@
 import json
+import os
 import uuid
 import asyncio
 from typing import Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -11,6 +13,22 @@ from pydantic import BaseModel
 from agents.learning_agent import LearningAgent
 from services.session_service import SessionService
 from services.obsidian_service import ObsidianService
+
+load_dotenv()
+
+# API keys from environment — used as fallback when client doesn't supply one
+_ENV_API_KEYS: dict[str, str] = {
+    "anthropic": os.getenv("ANTHROPIC_API_KEY", ""),
+    "openai":    os.getenv("OPENAI_API_KEY", ""),
+    "deepseek":  os.getenv("DEEPSEEK_API_KEY", ""),
+    "gemini":    os.getenv("GEMINI_API_KEY", ""),
+}
+
+
+def _resolve_api_key(provider: str, client_key: str) -> str:
+    """Return client_key if provided, otherwise fall back to env variable."""
+    return client_key or _ENV_API_KEYS.get(provider, "")
+
 
 app = FastAPI(title="Festival Learning Agent")
 
@@ -50,7 +68,8 @@ async def get_session(session_id: str):
 
 class ExportRequest(BaseModel):
     obsidian_path: str
-    api_key: str
+    api_key: str = ""
+    provider: str = "anthropic"
 
 
 @app.post("/sessions/{session_id}/export")
@@ -62,7 +81,8 @@ async def export_session(session_id: str, body: ExportRequest):
     # Generate summary if not already present
     if session.get("summary") is None:
         try:
-            agent = LearningAgent(api_key=body.api_key)
+            resolved_key = _resolve_api_key(body.provider, body.api_key)
+            agent = LearningAgent(api_key=resolved_key, provider=body.provider)
             summary = await agent.generate_session_summary(session)
             session_service.update_summary(session_id, summary)
             session = session_service.get_session(session_id)
@@ -108,13 +128,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             # session_start
             # ------------------------------------------------------------------
             if msg_type == "session_start":
-                api_key = message.get("api_key", "").strip()
-                if not api_key:
-                    await send({"type": "error", "message": "api_key is required in session_start"})
-                    continue
-
                 provider = message.get("provider", "anthropic")
                 model = message.get("model") or None
+                api_key = _resolve_api_key(provider, message.get("api_key", "").strip())
+                if not api_key:
+                    await send({"type": "error", "message": f"API key not found. Set it in the app or add {provider.upper()}_API_KEY to backend/.env"})
+                    continue
+
                 learning_agent = LearningAgent(api_key=api_key, provider=provider, model=model)
                 obsidian_path = message.get("obsidian_path") or None
 
