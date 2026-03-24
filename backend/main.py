@@ -197,21 +197,14 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             if msg_type == "session_start":
                 provider = message.get("provider", "anthropic")
                 model = message.get("model") or None
-                api_key = _resolve_api_key(provider, message.get("api_key", "").strip())
-                if not api_key:
-                    await send({"type": "error", "message": f"API key not found. Set it in the app or add {provider.upper()}_API_KEY to backend/.env"})
-                    continue
-
-                learning_agent = LearningAgent(api_key=api_key, provider=provider, model=model)
-                obsidian_path = message.get("obsidian_path") or None
-
                 title = message.get("title", "Untitled Lecture")
                 speaker = message.get("speaker", "Unknown")
                 session_type = message.get("session_type", "Lecture")
                 group = message.get("group", "")
                 session_date = message.get("session_date", "")
+                obsidian_path = message.get("obsidian_path") or None
 
-                # Only create session if it doesn't exist yet (prevents overwrite on WS reconnect)
+                # Always create/persist the session first — before API key check
                 if session_service.get_session(session_id) is None:
                     session_service.create_session(
                         session_id=session_id,
@@ -222,6 +215,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                         session_date=session_date,
                     )
 
+                # Now resolve API key and initialise the agent
+                api_key = _resolve_api_key(provider, message.get("api_key", "").strip())
+                if not api_key:
+                    await send({"type": "error", "message": f"API key not found. Set it in the app or add {provider.upper()}_API_KEY to backend/.env"})
+                    continue
+
+                learning_agent = LearningAgent(api_key=api_key, provider=provider, model=model)
                 await send({"type": "status", "message": f"Session '{title}' started"})
 
             # ------------------------------------------------------------------
