@@ -105,24 +105,30 @@ export function useSpeechRecognition({
     }
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      if (event.error !== 'aborted') {
-        setError(`Speech recognition error: ${event.error}`)
+      if (event.error === 'not-allowed') {
+        setError('마이크 권한이 거부되었습니다. 브라우저 설정에서 마이크를 허용해주세요.')
+        shouldRestartRef.current = false
+      } else if (event.error === 'no-speech') {
+        // Expected when no speech detected — will auto-restart via onend
+      } else if (event.error !== 'aborted') {
+        setError(`음성 인식 오류: ${event.error}`)
       }
     }
 
     recognition.onend = () => {
       setIsListening(false)
       if (shouldRestartRef.current && enabled) {
+        // Restart quickly (100ms) to minimise gaps between utterances
         setTimeout(() => {
           if (shouldRestartRef.current) {
             try {
               recognition.start()
               setIsListening(true)
             } catch {
-              // ignore
+              // Already started or unavailable — ignore
             }
           }
-        }, 300)
+        }, 100)
       }
     }
 

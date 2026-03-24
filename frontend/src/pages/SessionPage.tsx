@@ -534,6 +534,13 @@ export function SessionPage() {
         </button>
       </header>
 
+      {/* Browser support warning */}
+      {!isSupported && (
+        <div className="px-5 py-2 bg-warning/10 border-b border-warning/20 text-xs text-warning">
+          ⚠️ 이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge를 사용해주세요.
+        </div>
+      )}
+
       {/* Error banner */}
       {error && (
         <div className="px-5 py-2 bg-error/10 border-b border-error/20 text-xs text-error">

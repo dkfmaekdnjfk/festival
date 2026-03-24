@@ -211,14 +211,16 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 group = message.get("group", "")
                 session_date = message.get("session_date", "")
 
-                session_service.create_session(
-                    session_id=session_id,
-                    title=title,
-                    speaker=speaker,
-                    session_type=session_type,
-                    group=group,
-                    session_date=session_date,
-                )
+                # Only create session if it doesn't exist yet (prevents overwrite on WS reconnect)
+                if session_service.get_session(session_id) is None:
+                    session_service.create_session(
+                        session_id=session_id,
+                        title=title,
+                        speaker=speaker,
+                        session_type=session_type,
+                        group=group,
+                        session_date=session_date,
+                    )
 
                 await send({"type": "status", "message": f"Session '{title}' started"})
 

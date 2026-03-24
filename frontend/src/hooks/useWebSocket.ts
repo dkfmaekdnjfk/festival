@@ -14,12 +14,19 @@ interface UseWebSocketReturn {
 export function useWebSocket(sessionId: string | null): UseWebSocketReturn {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Track whether session_start has already been sent — don't repeat on reconnect
+  const sessionStartedRef = useRef(false)
   const store = useAppStore()
   const storeRef = useRef(store)
 
   useEffect(() => {
     storeRef.current = store
   })
+
+  // Reset the flag whenever sessionId changes (new session)
+  useEffect(() => {
+    sessionStartedRef.current = false
+  }, [sessionId])
 
   const send = useCallback((msg: SendMessage) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -43,7 +50,8 @@ export function useWebSocket(sessionId: string | null): UseWebSocketReturn {
         if (!isMounted) return
         storeRef.current.setWsStatus('connected')
 
-        // Send session_start after connection
+        // Always send session_start so backend can (re)initialise the agent.
+        // Backend skips session creation if the session already exists.
         const s = storeRef.current
         ws.send(
           JSON.stringify({
@@ -59,7 +67,12 @@ export function useWebSocket(sessionId: string | null): UseWebSocketReturn {
             obsidian_path: s.settings.obsidianPath,
           })
         )
-        storeRef.current.startSession()
+
+        // Only reset frontend state on the very first connection
+        if (!sessionStartedRef.current) {
+          sessionStartedRef.current = true
+          storeRef.current.startSession()
+        }
       }
 
       ws.onmessage = (event: MessageEvent) => {
