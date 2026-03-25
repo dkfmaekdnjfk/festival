@@ -40,6 +40,12 @@ export interface Concept {
   first_seen?: string
 }
 
+export interface TranscriptChunk {
+  text: string
+  elapsed: number    // seconds from session start
+  restored?: boolean // true for chunks loaded from a previous session
+}
+
 export interface Message {
   role: 'user' | 'assistant'
   text: string
@@ -68,6 +74,8 @@ interface AppStore {
   sessionGroup: string
   sessionDate: string    // YYYY-MM-DD
   transcript: string
+  transcriptChunks: TranscriptChunk[]
+  sessionStartTime: number | null   // Date.now() when session started
   interimTranscript: string
   concepts: Concept[]
   messages: Message[]
@@ -120,6 +128,8 @@ export const useAppStore = create<AppStore>()(
       sessionGroup: '',
       sessionDate: new Date().toISOString().slice(0, 10),
       transcript: '',
+      transcriptChunks: [],
+      sessionStartTime: null,
       interimTranscript: '',
       concepts: [],
       messages: [],
@@ -144,6 +154,8 @@ export const useAppStore = create<AppStore>()(
         set({
           sessionStatus: 'active',
           transcript: '',
+          transcriptChunks: [],
+          sessionStartTime: Date.now(),
           interimTranscript: '',
           concepts: [],
           messages: [],
@@ -156,12 +168,16 @@ export const useAppStore = create<AppStore>()(
 
       appendTranscript: (text, isFinal) => {
         if (isFinal) {
-          set((state) => ({
-            transcript: state.transcript
-              ? state.transcript + ' ' + text
-              : text,
-            interimTranscript: '',
-          }))
+          set((state) => {
+            const elapsed = state.sessionStartTime
+              ? Math.floor((Date.now() - state.sessionStartTime) / 1000)
+              : 0
+            return {
+              transcript: state.transcript ? state.transcript + ' ' + text : text,
+              transcriptChunks: [...state.transcriptChunks, { text, elapsed }],
+              interimTranscript: '',
+            }
+          })
         } else {
           set({ interimTranscript: text })
         }
@@ -225,6 +241,8 @@ export const useAppStore = create<AppStore>()(
           sessionGroup: '',
           sessionDate: new Date().toISOString().slice(0, 10),
           transcript: '',
+          transcriptChunks: [],
+          sessionStartTime: null,
           interimTranscript: '',
           concepts: [],
           messages: [],
@@ -234,8 +252,25 @@ export const useAppStore = create<AppStore>()(
           agentStatus: '',
         }),
 
-      restoreSession: (transcript, concepts) =>
-        set({ transcript, concepts, sessionStatus: 'active' }),
+      restoreSession: (transcript, concepts) => {
+        // Split the restored transcript into sentence-like chunks for display
+        const sentences = transcript
+          .split(/(?<=[.!?。])\s+|(?<=\n)/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+        const chunks: TranscriptChunk[] = sentences.map((text) => ({
+          text,
+          elapsed: 0,
+          restored: true,
+        }))
+        set({
+          transcript,
+          transcriptChunks: chunks,
+          sessionStartTime: Date.now(),
+          concepts,
+          sessionStatus: 'active',
+        })
+      },
     }),
     {
       name: 'festival-settings',

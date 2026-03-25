@@ -15,16 +15,30 @@ import { useWebSocket } from '../hooks/useWebSocket'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { cn, formatTime } from '../lib/utils'
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function fmtElapsed(seconds: number): string {
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}:${String(s).padStart(2, '0')}`
+  }
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
 // ─── Live Transcript Panel ───────────────────────────────────────────────────
 
 function LiveTranscriptPanel() {
-  const transcript = useAppStore((s) => s.transcript)
+  const chunks = useAppStore((s) => s.transcriptChunks)
   const interimTranscript = useAppStore((s) => s.interimTranscript)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [transcript, interimTranscript])
+  }, [chunks, interimTranscript])
 
   return (
     <div className="flex flex-col h-full">
@@ -32,20 +46,45 @@ function LiveTranscriptPanel() {
         <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
           실시간 자막
         </span>
+        {chunks.length > 0 && (
+          <span className="text-xs text-text-subtle">{chunks.length}문장</span>
+        )}
       </div>
-      <div className="flex-1 overflow-y-auto p-4">
-        <p className="font-mono text-sm leading-relaxed text-text whitespace-pre-wrap break-words">
-          {transcript}
-          {transcript && interimTranscript ? ' ' : ''}
-          {interimTranscript && (
-            <span className="text-text-muted">{interimTranscript}</span>
-          )}
-        </p>
-        {!transcript && !interimTranscript && (
+      <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
+        {chunks.length === 0 && !interimTranscript && (
           <p className="text-text-subtle text-sm italic">
             녹음을 시작하면 자막이 여기에 표시됩니다...
           </p>
         )}
+
+        {chunks.map((chunk, i) => (
+          <div key={i} className="flex gap-3">
+            <span className={cn(
+              'text-[11px] font-mono shrink-0 pt-0.5 w-10 text-right tabular-nums',
+              chunk.restored ? 'text-text-subtle' : 'text-primary/60'
+            )}>
+              {chunk.restored ? '–' : fmtElapsed(chunk.elapsed)}
+            </span>
+            <p className={cn(
+              'text-sm leading-relaxed break-words flex-1',
+              chunk.restored ? 'text-text-subtle italic' : 'text-text'
+            )}>
+              {chunk.text}
+            </p>
+          </div>
+        ))}
+
+        {interimTranscript && (
+          <div className="flex gap-3">
+            <span className="text-[11px] font-mono shrink-0 pt-0.5 w-10 text-right text-text-subtle">
+              ···
+            </span>
+            <p className="text-sm leading-relaxed text-text-muted italic flex-1 streaming-cursor">
+              {interimTranscript}
+            </p>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
     </div>
