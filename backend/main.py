@@ -205,7 +205,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 obsidian_path = message.get("obsidian_path") or None
 
                 # Always create/persist the session first — before API key check
-                if session_service.get_session(session_id) is None:
+                existing = session_service.get_session(session_id)
+                if existing is None:
                     session_service.create_session(
                         session_id=session_id,
                         title=title,
@@ -214,6 +215,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                         group=group,
                         session_date=session_date,
                     )
+                elif existing.get("status") == "ended":
+                    # Resuming a completed session — reopen it
+                    session_service.reopen_session(session_id)
 
                 # Now resolve API key and initialise the agent
                 api_key = _resolve_api_key(provider, message.get("api_key", "").strip())

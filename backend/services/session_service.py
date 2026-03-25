@@ -122,3 +122,12 @@ class SessionService:
         session["ended_at"] = datetime.now().isoformat()
         session["status"] = "ended"
         self._save(session_id)
+
+    def reopen_session(self, session_id: str) -> None:
+        """Reopen an ended session so recording can continue."""
+        session = self.sessions.get(session_id)
+        if session is None:
+            return
+        session["status"] = "active"
+        session["ended_at"] = None
+        self._save(session_id)

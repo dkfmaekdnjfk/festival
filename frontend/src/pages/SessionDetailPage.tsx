@@ -165,16 +165,13 @@ export function SessionDetailPage() {
           >
             {isEnded ? '완료' : '진행 중'}
           </span>
-          {/* Resume button — only for sessions that aren't ended yet */}
-          {!isEnded && (
-            <button
-              onClick={() => handleResume(session)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium transition-colors"
-            >
-              <Play size={11} />
-              이어하기
-            </button>
-          )}
+          <button
+            onClick={() => handleResume(session)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium transition-colors"
+          >
+            <Play size={11} />
+            {isEnded ? '이어 녹음' : '이어하기'}
+          </button>
         </div>
       </div>
 
