@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Clock, User, Tag } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Clock, User, Tag, ChevronRight } from 'lucide-react'
 import { getSessions, type Session } from '../lib/api'
 import { formatDate } from '../lib/utils'
 
@@ -51,8 +52,12 @@ function GroupBadge({ group }: { group: string }) {
 }
 
 function SessionRow({ session }: { session: Session }) {
+  const navigate = useNavigate()
   return (
-    <div className="flex items-center justify-between p-4 bg-surface border border-border rounded-xl hover:border-primary/30 transition-colors">
+    <div
+      onClick={() => navigate(`/sessions/${session.id}`)}
+      className="flex items-center justify-between p-4 bg-surface border border-border rounded-xl hover:border-primary/40 transition-colors cursor-pointer group"
+    >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <p className="text-sm font-medium text-text">{session.title}</p>
@@ -67,7 +72,7 @@ function SessionRow({ session }: { session: Session }) {
           )}
           <span className="flex items-center gap-1 text-xs text-text-muted">
             <Clock size={11} />
-            {formatDate(session.created_at)}
+            {formatDate(session.started_at || session.created_at)}
           </span>
           <span className="flex items-center gap-1 text-xs text-text-subtle">
             <Tag size={11} />
@@ -75,15 +80,18 @@ function SessionRow({ session }: { session: Session }) {
           </span>
         </div>
       </div>
-      <span
-        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ml-3 ${
-          session.status === 'active'
-            ? 'border-success/30 text-success bg-success/10'
-            : 'border-border text-text-subtle'
-        }`}
-      >
-        {session.status === 'active' ? '진행 중' : '완료'}
-      </span>
+      <div className="flex items-center gap-2 shrink-0 ml-3">
+        <span
+          className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
+            session.status === 'active'
+              ? 'border-success/30 text-success bg-success/10'
+              : 'border-border text-text-subtle'
+          }`}
+        >
+          {session.status === 'active' ? '진행 중' : '완료'}
+        </span>
+        <ChevronRight size={14} className="text-text-subtle group-hover:text-text-muted transition-colors" />
+      </div>
     </div>
   )
 }

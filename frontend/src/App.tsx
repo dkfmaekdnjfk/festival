@@ -5,6 +5,7 @@ import { SessionPage } from './pages/SessionPage'
 import { Settings } from './pages/Settings'
 import { SessionHistory } from './pages/SessionHistory'
 import { CalendarPage } from './pages/CalendarPage'
+import { SessionDetailPage } from './pages/SessionDetailPage'
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/session" element={<SessionPage />} />
+          <Route path="/sessions/:id" element={<SessionDetailPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/history" element={<SessionHistory />} />

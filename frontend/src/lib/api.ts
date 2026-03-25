@@ -6,11 +6,16 @@ export interface Session {
   speaker: string
   session_type: string
   group: string
-  session_date: string   // YYYY-MM-DD, user-chosen date
+  session_date: string
   created_at: string
   started_at: string
   ended_at?: string
   status: 'active' | 'ended'
+  // Full session detail fields (populated in GET /sessions/:id)
+  transcript?: string
+  concepts?: { name: string; definition: string; first_seen?: string }[]
+  user_questions?: { question: string; answer: string; timestamp: string }[]
+  confusion_points?: string[]
   summary?: {
     summary: string
     key_concepts: { name: string; definition: string }[]
