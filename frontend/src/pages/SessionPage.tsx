@@ -171,23 +171,35 @@ function ChatPanel({ send }: { send: (msg: Record<string, unknown>) => void }) {
         <div ref={bottomRef} />
       </div>
 
+      {/* Input box — textarea on top, toolbar on bottom */}
       <div className="p-3 border-t border-border shrink-0">
-        <div className="flex gap-2 items-end">
+        <div className="rounded-2xl border border-border bg-surface-elevated focus-within:border-primary/50 transition-colors">
           <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value)
+              // Auto-resize
+              e.target.style.height = 'auto'
+              e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
+            }}
             onKeyDown={handleKeyDown}
-            placeholder="질문 입력... (Enter로 전송)"
+            placeholder="질문을 입력하세요..."
             rows={2}
-            className="flex-1 bg-surface-elevated border border-border rounded-xl px-3 py-2 text-sm text-text placeholder-text-subtle focus:outline-none focus:border-primary/60 resize-none transition-colors"
+            className="w-full bg-transparent px-4 pt-3 pb-1 text-sm text-text placeholder-text-subtle focus:outline-none resize-none block"
+            style={{ minHeight: '60px', maxHeight: '160px' }}
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim()}
-            className="p-2.5 bg-primary hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-colors shrink-0"
-          >
-            <Send size={15} />
-          </button>
+          <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
+            <span className="text-[11px] text-text-subtle select-none">
+              Shift+Enter 줄바꿈
+            </span>
+            <button
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className="flex items-center justify-center w-8 h-8 bg-primary hover:bg-primary-hover disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg transition-colors shrink-0"
+            >
+              <Send size={13} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
