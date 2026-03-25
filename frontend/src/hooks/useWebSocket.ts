@@ -42,7 +42,7 @@ export function useWebSocket(sessionId: string | null): UseWebSocketReturn {
     const connect = () => {
       if (!isMounted) return
 
-      const ws = new WebSocket(`ws://localhost:8000/ws/${sessionId}`)
+      const ws = new WebSocket(`ws://localhost:8001/ws/${sessionId}`)
       wsRef.current = ws
       storeRef.current.setWsStatus('connecting')
 
