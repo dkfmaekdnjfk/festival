@@ -90,6 +90,7 @@ interface AppStore {
   setWsStatus: (s: AppStore['wsStatus']) => void
   setAgentStatus: (s: string) => void
   resetSession: () => void
+  restoreSession: (transcript: string, concepts: Concept[]) => void
 }
 
 const defaultSettings: Settings = {
@@ -232,6 +233,9 @@ export const useAppStore = create<AppStore>()(
           wsStatus: 'disconnected',
           agentStatus: '',
         }),
+
+      restoreSession: (transcript, concepts) =>
+        set({ transcript, concepts, sessionStatus: 'active' }),
     }),
     {
       name: 'festival-settings',

@@ -88,13 +88,17 @@ export function SessionDetailPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { setSessionId, setSessionInfo, resetSession } = useAppStore()
+  const { setSessionId, setSessionInfo, resetSession, restoreSession } = useAppStore()
 
   const handleResume = (s: Session) => {
-    // Restore session state into the store and navigate to session page
     resetSession()
     setSessionInfo(s.title, s.speaker, s.session_type, s.group ?? '', s.session_date ?? '')
     setSessionId(s.id)
+    // Restore previously recorded transcript and concepts so they show up immediately
+    restoreSession(
+      s.transcript ?? '',
+      s.concepts ?? [],
+    )
     navigate('/session')
   }
 

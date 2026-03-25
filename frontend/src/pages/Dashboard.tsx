@@ -173,12 +173,21 @@ function StartSessionModal({
 }
 
 function SessionCard({ session }: { session: Session }) {
+  const navigate = useNavigate()
   return (
-    <div className="flex items-center justify-between p-4 bg-surface border border-border rounded-xl hover:border-primary/40 transition-colors group cursor-pointer">
+    <div
+      onClick={() => navigate(`/sessions/${session.id}`)}
+      className="flex items-center justify-between p-4 bg-surface border border-border rounded-xl hover:border-primary/40 transition-colors group cursor-pointer"
+    >
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-text truncate">
-          {session.title}
-        </p>
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <p className="text-sm font-medium text-text truncate">{session.title}</p>
+          {session.status === 'active' && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full border border-success/30 text-success bg-success/10 font-medium shrink-0">
+              진행 중
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3 mt-1">
           {session.speaker && (
             <span className="flex items-center gap-1 text-xs text-text-muted">
@@ -188,7 +197,7 @@ function SessionCard({ session }: { session: Session }) {
           )}
           <span className="flex items-center gap-1 text-xs text-text-muted">
             <Clock size={11} />
-            {formatDate(session.created_at)}
+            {formatDate(session.started_at || session.created_at)}
           </span>
           <span className="text-xs text-text-subtle">{session.session_type}</span>
         </div>
