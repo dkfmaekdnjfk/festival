@@ -67,6 +67,15 @@ declare global {
   }
 }
 
+interface UseSpeechRecognitionReturn {
+  isListening: boolean
+  isSupported: boolean
+  start: () => void
+  stop: () => void
+  error: string | null
+  volume: number
+}
+
 export function useSpeechRecognition({
   onTranscript,
   language,
@@ -74,12 +83,17 @@ export function useSpeechRecognition({
 }: UseSpeechRecognitionOptions): UseSpeechRecognitionReturn {
   const [isListening, setIsListening] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [volume, setVolume] = useState(0)
   const recognitionRef = useRef<ISpeechRecognition | null>(null)
   const isSupported =
     typeof window !== 'undefined' &&
     !!(window.SpeechRecognition || window.webkitSpeechRecognition)
   const shouldRestartRef = useRef(false)
   const onTranscriptRef = useRef(onTranscript)
+  const rafRef = useRef<number | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
 
   useEffect(() => {
     onTranscriptRef.current = onTranscript
@@ -116,24 +130,54 @@ export function useSpeechRecognition({
     }
 
     recognition.onend = () => {
-      setIsListening(false)
-      if (shouldRestartRef.current && enabled) {
-        // Restart quickly (100ms) to minimise gaps between utterances
+      // Use ref only — don't capture `enabled` from closure (stale on first call)
+      if (shouldRestartRef.current) {
         setTimeout(() => {
           if (shouldRestartRef.current) {
             try {
               recognition.start()
-              setIsListening(true)
             } catch {
-              // Already started or unavailable — ignore
+              // ignore
             }
           }
         }, 100)
+      } else {
+        setIsListening(false)
       }
     }
 
     return recognition
-  }, [isSupported, language, enabled])
+  }, [isSupported, language])
+
+  const startVolumeMonitor = useCallback(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      streamRef.current = stream
+      const ctx = new AudioContext()
+      audioCtxRef.current = ctx
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 256
+      analyserRef.current = analyser
+      ctx.createMediaStreamSource(stream).connect(analyser)
+      const data = new Uint8Array(analyser.frequencyBinCount)
+      const tick = () => {
+        analyser.getByteFrequencyData(data)
+        const avg = data.reduce((a, b) => a + b, 0) / data.length
+        setVolume(Math.min(1, avg / 60))
+        rafRef.current = requestAnimationFrame(tick)
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }).catch(() => {})
+  }, [])
+
+  const stopVolumeMonitor = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    audioCtxRef.current?.close()
+    streamRef.current = null
+    audioCtxRef.current = null
+    analyserRef.current = null
+    setVolume(0)
+  }, [])
 
   const start = useCallback(() => {
     if (!isSupported) {
@@ -158,10 +202,11 @@ export function useSpeechRecognition({
     try {
       recognition.start()
       setIsListening(true)
+      startVolumeMonitor()
     } catch (err) {
       setError(String(err))
     }
-  }, [isSupported, createRecognition])
+  }, [isSupported, createRecognition, startVolumeMonitor])
 
   const stop = useCallback(() => {
     shouldRestartRef.current = false
@@ -173,7 +218,8 @@ export function useSpeechRecognition({
       }
     }
     setIsListening(false)
-  }, [])
+    stopVolumeMonitor()
+  }, [stopVolumeMonitor])
 
   // Stop when enabled becomes false
   useEffect(() => {
@@ -196,5 +242,5 @@ export function useSpeechRecognition({
     }
   }, [])
 
-  return { isListening, isSupported, start, stop, error }
+  return { isListening, isSupported, start, stop, error, volume }
 }

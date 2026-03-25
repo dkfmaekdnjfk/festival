@@ -96,32 +96,20 @@ export function useWebSocket(sessionId: string | null): UseWebSocketReturn {
               const text = data.text as string
               const streaming = data.streaming as boolean
               if (streaming) {
+                // text is the full accumulated answer so far — replace in place
                 storeRef.current.updateLastMessage(text)
               } else {
-                // Final message — mark streaming as done
-                const messages = storeRef.current.messages
-                const last = messages[messages.length - 1]
-                if (last?.role === 'assistant' && last.streaming) {
-                  storeRef.current.updateLastMessage(text)
-                  // Mark as not streaming
-                  useAppStore.setState((state) => {
-                    const msgs = [...state.messages]
-                    if (msgs.length > 0) {
-                      msgs[msgs.length - 1] = {
-                        ...msgs[msgs.length - 1],
-                        streaming: false,
-                      }
-                    }
-                    return { messages: msgs }
-                  })
-                } else {
-                  storeRef.current.addMessage({
-                    role: 'assistant',
-                    text,
-                    timestamp: new Date().toISOString(),
-                    streaming: false,
-                  })
-                }
+                // Stream ended — just clear the streaming flag, keep the text
+                useAppStore.setState((state) => {
+                  const msgs = [...state.messages]
+                  if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
+                    msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], streaming: false }
+                  } else if (text) {
+                    // Edge case: no streaming messages yet, add directly
+                    msgs.push({ role: 'assistant', text, timestamp: new Date().toISOString(), streaming: false })
+                  }
+                  return { messages: msgs }
+                })
               }
               break
             }

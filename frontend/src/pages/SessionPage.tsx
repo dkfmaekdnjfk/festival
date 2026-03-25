@@ -422,6 +422,30 @@ function SessionSummaryView({ onNewSession }: { onNewSession: () => void }) {
   )
 }
 
+// ─── Mic Volume Meter ─────────────────────────────────────────────────────────
+
+function MicVolumeMeter({ volume }: { volume: number }) {
+  const bars = 12
+  return (
+    <div className="flex items-center gap-0.5 h-5">
+      {Array.from({ length: bars }).map((_, i) => {
+        const threshold = i / bars
+        const active = volume > threshold
+        return (
+          <div
+            key={i}
+            className={cn(
+              'w-1 rounded-full transition-all duration-75',
+              active ? 'bg-error' : 'bg-border',
+            )}
+            style={{ height: `${40 + (i / bars) * 60}%` }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Bottom Bar ───────────────────────────────────────────────────────────────
 
 function BottomBar({
@@ -429,11 +453,13 @@ function BottomBar({
   isSupported,
   onToggleMic,
   send,
+  volume,
 }: {
   isListening: boolean
   isSupported: boolean
   onToggleMic: () => void
   send: (msg: Record<string, unknown>) => void
+  volume: number
 }) {
   const understandingLevels = [
     { level: 3, label: '이해됨', emoji: '😊', color: 'text-success border-success/30 hover:bg-success/10' },
@@ -469,6 +495,8 @@ function BottomBar({
           </>
         )}
       </button>
+
+      {isListening && <MicVolumeMeter volume={volume} />}
 
       <div className="h-5 w-px bg-border" />
 
@@ -511,7 +539,7 @@ export function SessionPage() {
 
   const [micEnabled, setMicEnabled] = useState(false)
 
-  const { isListening, isSupported, start, stop, error } = useSpeechRecognition({
+  const { isListening, isSupported, start, stop, error, volume } = useSpeechRecognition({
     onTranscript: (text, isFinal) => {
       appendTranscript(text, isFinal)
       if (isFinal) {
@@ -623,6 +651,7 @@ export function SessionPage() {
         isSupported={isSupported}
         onToggleMic={handleToggleMic}
         send={send as (msg: Record<string, unknown>) => void}
+        volume={volume}
       />
     </div>
   )

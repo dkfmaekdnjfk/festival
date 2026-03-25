@@ -298,14 +298,14 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                         full_answer += chunk
                         await send({
                             "type": "agent_response",
-                            "text": chunk,
+                            "text": full_answer,   # send accumulated text, not just the delta
                             "streaming": True,
                         })
 
-                    # Signal end of stream
+                    # Signal end of stream with final accumulated text
                     await send({
                         "type": "agent_response",
-                        "text": "",
+                        "text": full_answer,
                         "streaming": False,
                     })
 
