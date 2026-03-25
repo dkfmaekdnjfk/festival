@@ -155,12 +155,15 @@ export function useWebSocket(sessionId: string | null): UseWebSocketReturn {
 
       ws.onclose = () => {
         if (!isMounted) return
+        // Ignore close events from a superseded WS instance (StrictMode double-invoke)
+        if (wsRef.current !== ws && wsRef.current !== null) return
         storeRef.current.setWsStatus('disconnected')
         wsRef.current = null
 
-        // Reconnect if session is still active
+        // Retry as long as the session hasn't finished.
+        // This covers both initial failures (status='idle') and mid-session drops.
         const status = storeRef.current.sessionStatus
-        if (status === 'active' || status === 'starting') {
+        if (status !== 'ended' && status !== 'ending') {
           reconnectTimerRef.current = setTimeout(() => {
             if (isMounted) connect()
           }, 2000)
