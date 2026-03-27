@@ -124,6 +124,50 @@ export function useWebSocket(sessionId: string | null): UseWebSocketReturn {
               storeRef.current.setObsidianSaved(data.path as string)
               break
 
+            case 'session_restored': {
+              // 이어 녹음: 이전 전사 + 개념 복원
+              const transcript = data.transcript as string
+              const concepts = data.concepts as { name: string; definition: string; first_seen?: string }[]
+              storeRef.current.restoreSession(transcript, concepts)
+              break
+            }
+
+            case 'agent_proactive':
+              storeRef.current.addMessage({
+                role: 'assistant',
+                text: data.text as string,
+                timestamp: new Date().toISOString(),
+                streaming: false,
+                proactive: true,
+                confusion: !!(data.is_confusion),
+              })
+              break
+
+            case 'confusion_noted':
+              storeRef.current.addMessage({
+                role: 'assistant',
+                text: `혼동 포인트로 기록했습니다: "${data.description as string}"`,
+                timestamp: new Date().toISOString(),
+                streaming: false,
+                proactive: true,
+                confusion: true,
+              })
+              break
+
+            case 'keyword_added':
+              storeRef.current.setKeywords(data.keywords as string[])
+              break
+
+            case 'understanding_feedback':
+              storeRef.current.addMessage({
+                role: 'assistant',
+                text: data.message as string,
+                timestamp: new Date().toISOString(),
+                streaming: false,
+                proactive: true,
+              })
+              break
+
             case 'error':
               storeRef.current.setAgentStatus(`오류: ${data.message as string}`)
               break

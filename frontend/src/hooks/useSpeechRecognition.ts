@@ -242,5 +242,5 @@ export function useSpeechRecognition({
     }
   }, [])
 
-  return { isListening, isSupported, start, stop, error, volume }
+  return { isListening, isSupported, start, stop, error, volume, downloadLastChunk: undefined as (() => void) | undefined }
 }

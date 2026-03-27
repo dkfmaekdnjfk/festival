@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import { useNavigate } from 'react-router-dom'
 import {
   Mic,
@@ -13,6 +16,7 @@ import {
 import { useAppStore, type Concept } from '../store/appStore'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
+import { useWhisperTranscription } from '../hooks/useWhisperTranscription'
 import { cn, formatTime } from '../lib/utils'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -93,11 +97,13 @@ function LiveTranscriptPanel() {
 
 // ─── Chat Panel ──────────────────────────────────────────────────────────────
 
-function MessageBubble({ role, text, timestamp, streaming }: {
+function MessageBubble({ role, text, timestamp, streaming, proactive, confusion }: {
   role: 'user' | 'assistant'
   text: string
   timestamp: string
   streaming?: boolean
+  proactive?: boolean
+  confusion?: boolean
 }) {
   const isUser = role === 'user'
   return (
@@ -107,12 +113,27 @@ function MessageBubble({ role, text, timestamp, streaming }: {
           'max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
           isUser
             ? 'bg-primary text-white rounded-br-sm'
+            : confusion
+            ? 'bg-warning/5 border border-warning/30 text-text rounded-bl-sm'
+            : proactive
+            ? 'bg-primary/5 border border-primary/20 text-text rounded-bl-sm'
             : 'bg-surface-elevated border border-border text-text rounded-bl-sm'
         )}
       >
-        <p className={cn('whitespace-pre-wrap', streaming && 'streaming-cursor')}>
-          {text}
-        </p>
+        {confusion && (
+          <p className="text-[10px] text-warning font-medium mb-1">⚠️ 혼동 포인트</p>
+        )}
+        {!confusion && proactive && (
+          <p className="text-[10px] text-primary/70 font-medium mb-1">✦ 에이전트</p>
+        )}
+        <div className={cn('prose prose-sm max-w-none dark:prose-invert [&_.katex]:text-[1em]', streaming && 'streaming-cursor')}>
+          <ReactMarkdown
+            remarkPlugins={[remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+          >
+            {text}
+          </ReactMarkdown>
+        </div>
         <p
           className={cn(
             'text-[10px] mt-1',
@@ -145,7 +166,7 @@ function ChatPanel({ send }: { send: (msg: Record<string, unknown>) => void }) {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       handleSend()
     }
@@ -166,7 +187,7 @@ function ChatPanel({ send }: { send: (msg: Record<string, unknown>) => void }) {
           </p>
         )}
         {messages.map((msg, i) => (
-          <MessageBubble key={i} {...msg} />
+          <MessageBubble key={i} {...msg} confusion={msg.confusion} />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -210,14 +231,24 @@ function ChatPanel({ send }: { send: (msg: Record<string, unknown>) => void }) {
 
 function ConceptPill({ concept }: { concept: Concept }) {
   const [showDef, setShowDef] = useState(false)
+  const removeConcept = useAppStore((s) => s.removeConcept)
   return (
     <div className="relative">
-      <button
-        onClick={() => setShowDef((v) => !v)}
-        className="px-2.5 py-1 rounded-full text-xs border border-primary/40 text-primary hover:bg-primary/10 transition-colors"
-      >
-        {concept.name}
-      </button>
+      <div className="flex items-center gap-0.5 px-2.5 py-1 rounded-full border border-primary/40 group">
+        <button
+          onClick={() => setShowDef((v) => !v)}
+          className="text-xs text-primary hover:text-primary transition-colors"
+        >
+          {concept.name}
+        </button>
+        <button
+          onClick={() => removeConcept(concept.name)}
+          className="ml-1 text-text-subtle hover:text-error transition-colors opacity-0 group-hover:opacity-100"
+          title="삭제"
+        >
+          ×
+        </button>
+      </div>
       {showDef && (
         <div className="absolute bottom-full left-0 mb-2 w-56 bg-surface-elevated border border-border rounded-xl p-3 shadow-xl z-10">
           <p className="text-xs font-semibold text-text mb-1">{concept.name}</p>
@@ -230,8 +261,36 @@ function ConceptPill({ concept }: { concept: Concept }) {
   )
 }
 
-function ConceptsPanel() {
+function KeywordInput({ onAdd }: { onAdd: (kw: string) => void }) {
+  const [value, setValue] = useState('')
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const kw = value.trim()
+    if (kw) { onAdd(kw); setValue('') }
+  }
+  return (
+    <form onSubmit={handleSubmit} className="flex gap-1.5 mt-2">
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="키워드 직접 추가..."
+        className="flex-1 px-2.5 py-1.5 text-xs bg-background border border-border rounded-lg text-text placeholder:text-text-subtle focus:outline-none focus:border-primary"
+      />
+      <button
+        type="submit"
+        disabled={!value.trim()}
+        className="px-2.5 py-1.5 text-xs bg-primary hover:bg-primary-hover text-white rounded-lg disabled:opacity-40 transition-colors"
+      >
+        추가
+      </button>
+    </form>
+  )
+}
+
+function ConceptsPanel({ onAddKeyword }: { onAddKeyword: (kw: string) => void }) {
   const concepts = useAppStore((s) => s.concepts)
+  const keywords = useAppStore((s) => s.keywords)
+  const setKeywords = useAppStore((s) => s.setKeywords)
   const agentStatus = useAppStore((s) => s.agentStatus)
   const wsStatus = useAppStore((s) => s.wsStatus)
 
@@ -283,6 +342,29 @@ function ConceptsPanel() {
           )}
         </div>
 
+        {/* Keywords */}
+        <div>
+          <p className="text-[10px] text-text-subtle uppercase tracking-wider mb-2">
+            전사 키워드 힌트
+          </p>
+          {keywords.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 mb-1">
+              {keywords.map((kw) => (
+                <div key={kw} className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-surface border border-border group">
+                  <span className="text-xs text-text-muted">{kw}</span>
+                  <button
+                    onClick={() => setKeywords(keywords.filter((k) => k !== kw))}
+                    className="ml-1 text-text-subtle hover:text-error opacity-0 group-hover:opacity-100 transition-opacity"
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-text-subtle italic mb-1">채팅으로 추가하거나 직접 입력하세요.</p>
+          )}
+          <KeywordInput onAdd={onAddKeyword} />
+        </div>
+
         {/* WS status */}
         <div className="mt-auto">
           <p className="text-[10px] text-text-subtle uppercase tracking-wider mb-2">
@@ -325,7 +407,18 @@ function SessionSummaryView({ onNewSession }: { onNewSession: () => void }) {
   const obsidianPath = useAppStore((s) => s.obsidianPath)
   const sessionTitle = useAppStore((s) => s.sessionTitle)
 
-  if (!summary) return null
+  if (!summary) return (
+    <div className="h-full flex flex-col items-center justify-center gap-4 text-text-muted">
+      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <p className="text-sm">세션 요약 생성 중...</p>
+      <button
+        onClick={onNewSession}
+        className="mt-4 text-xs text-text-subtle underline hover:text-text transition-colors"
+      >
+        건너뛰고 홈으로
+      </button>
+    </div>
+  )
 
   return (
     <div className="h-full overflow-y-auto p-8">
@@ -454,12 +547,14 @@ function BottomBar({
   onToggleMic,
   send,
   volume,
+  transcriptionMethod,
 }: {
   isListening: boolean
   isSupported: boolean
   onToggleMic: () => void
   send: (msg: Record<string, unknown>) => void
   volume: number
+  transcriptionMethod: string
 }) {
   const understandingLevels = [
     { level: 3, label: '이해됨', emoji: '😊', color: 'text-success border-success/30 hover:bg-success/10' },
@@ -497,6 +592,10 @@ function BottomBar({
       </button>
 
       {isListening && <MicVolumeMeter volume={volume} />}
+
+      <span className="text-[10px] text-text-subtle px-1">
+        {transcriptionMethod === 'whisper' ? 'Whisper' : 'Web Speech'}
+      </span>
 
       <div className="h-5 w-px bg-border" />
 
@@ -539,16 +638,34 @@ export function SessionPage() {
 
   const [micEnabled, setMicEnabled] = useState(false)
 
-  const { isListening, isSupported, start, stop, error, volume } = useSpeechRecognition({
-    onTranscript: (text, isFinal) => {
-      appendTranscript(text, isFinal)
-      if (isFinal) {
-        send({ type: 'transcript', text, is_final: true })
-      }
-    },
+  const onTranscript = useCallback((text: string, isFinal: boolean) => {
+    appendTranscript(text, isFinal)
+    if (isFinal) {
+      send({ type: 'transcript', text, is_final: true })
+    }
+  }, [appendTranscript, send])
+
+  const useWhisper = settings.transcriptionMethod === 'whisper'
+
+  const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor)
+
+  const speechResult = useSpeechRecognition({
+    onTranscript,
     language: settings.language === 'ko' ? 'ko-KR' : 'en-US',
-    enabled: micEnabled,
+    enabled: micEnabled && !useWhisper,
   })
+
+  const keywords = useAppStore((s) => s.keywords)
+  const whisperResult = useWhisperTranscription({
+    onTranscript,
+    language: settings.language === 'ko' ? 'ko-KR' : 'en-US',
+    enabled: micEnabled && useWhisper,
+    apiKey: settings.whisperApiKey,
+    keywords,
+    sessionTitle,
+  })
+  const { isListening, isSupported, start, stop, error, volume } = useWhisper ? whisperResult : speechResult
+  const downloadLastChunk = useWhisper ? whisperResult.downloadLastChunk : undefined
 
   // Redirect to home if no session
   useEffect(() => {
@@ -572,6 +689,13 @@ export function SessionPage() {
     setMicEnabled(false)
     endSession()
     send({ type: 'session_end' })
+    // WS 응답이 없어도 5초 후 강제 종료
+    setTimeout(() => {
+      useAppStore.setState((s) => {
+        if (s.sessionStatus === 'ending') return { sessionStatus: 'ended' }
+        return {}
+      })
+    }, 5000)
   }
 
   const handleNewSession = () => {
@@ -588,11 +712,13 @@ export function SessionPage() {
       {/* Header */}
       <header className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface shrink-0">
         <div className="flex items-center gap-3">
-          {sessionStatus === 'active' && (
+          {isListening ? (
             <div className="flex items-center gap-1.5">
               <span className="recording-dot w-2 h-2 rounded-full bg-error" />
               <span className="text-xs text-error font-semibold">REC</span>
             </div>
+          ) : (
+            <div className="w-2 h-2 rounded-full bg-text-subtle" title="녹음 대기 중" />
           )}
           <div>
             <p className="text-sm font-semibold text-text leading-none">
@@ -604,19 +730,40 @@ export function SessionPage() {
           </div>
         </div>
 
-        <button
-          onClick={handleEndSession}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-error/30 text-error hover:bg-error/10 rounded-lg text-xs font-medium transition-colors"
-        >
-          <Square size={12} />
-          세션 종료
-        </button>
+        <div className="flex items-center gap-2">
+          {downloadLastChunk && isListening && (
+            <button
+              onClick={downloadLastChunk}
+              className="px-3 py-1.5 border border-border text-text-muted hover:text-text hover:border-text-muted rounded-lg text-xs transition-colors"
+              title="마지막 청크 다운로드 (녹음 품질 확인용)"
+            >
+              ↓ 청크 저장
+            </button>
+          )}
+          <button
+            onClick={handleEndSession}
+            disabled={sessionStatus === 'ending'}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-error/30 text-error hover:bg-error/10 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-wait"
+          >
+            <Square size={12} />
+            세션 종료
+          </button>
+        </div>
       </header>
 
       {/* Browser support warning */}
       {!isSupported && (
+        <div className="px-5 py-2 bg-error/10 border-b border-error/20 text-xs text-error">
+          {useWhisper
+            ? '⚠️ 이 브라우저는 MediaRecorder를 지원하지 않습니다. Chrome 또는 Edge를 사용해주세요.'
+            : '⚠️ 이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge를 사용해주세요.'}
+        </div>
+      )}
+      {isSupported && !isChrome && (
         <div className="px-5 py-2 bg-warning/10 border-b border-warning/20 text-xs text-warning">
-          ⚠️ 이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge를 사용해주세요.
+          {useWhisper
+            ? '⚠️ Chrome/Edge 외 브라우저에서는 Whisper 녹음이 불안정할 수 있습니다.'
+            : '⚠️ Web Speech API는 Chrome/Edge에서만 정상 동작합니다. 설정에서 Whisper로 전환하거나 Chrome을 사용해주세요.'}
         </div>
       )}
 
@@ -641,7 +788,7 @@ export function SessionPage() {
 
         {/* Concepts */}
         <div className="w-[260px] overflow-hidden">
-          <ConceptsPanel />
+          <ConceptsPanel onAddKeyword={(kw) => send({ type: 'add_keyword', keyword: kw })} />
         </div>
       </div>
 
@@ -652,6 +799,7 @@ export function SessionPage() {
         onToggleMic={handleToggleMic}
         send={send as (msg: Record<string, unknown>) => void}
         volume={volume}
+        transcriptionMethod={settings.transcriptionMethod}
       />
     </div>
   )

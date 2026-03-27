@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -24,6 +24,18 @@ _ENV_API_KEYS: dict[str, str] = {
     "deepseek":  os.getenv("DEEPSEEK_API_KEY", ""),
     "gemini":    os.getenv("GEMINI_API_KEY", ""),
 }
+
+
+_CONFUSION_PATTERNS = [
+    "모르겠", "모르는", "잘 모르", "이해가 안", "이해못", "이해 못",
+    "헷갈", "헷갈려", "어렵", "무슨 뜻", "뭔지", "왜 이렇", "왜이렇",
+    "설명해줘", "설명해 줘", "무슨 말", "뭔 말",
+    "don't understand", "confused", "unclear", "not sure", "what does", "what is",
+]
+
+def _is_confusion(text: str) -> bool:
+    t = text.lower()
+    return any(p in t for p in _CONFUSION_PATTERNS)
 
 
 def _resolve_api_key(provider: str, client_key: str) -> str:
@@ -63,6 +75,57 @@ async def env_keys():
         provider: bool(key)
         for provider, key in _ENV_API_KEYS.items()
     }
+
+
+@app.post("/transcribe")
+async def transcribe_audio(
+    audio: UploadFile = File(...),
+    api_key: str = Form(""),
+    language: str = Form("ko"),
+    prompt: str = Form(""),
+    keywords: str = Form(""),   # 콤마 구분 키워드 힌트
+    session_title: str = Form(""),
+):
+    """Transcribe audio using OpenAI Whisper API."""
+    resolved_key = _resolve_api_key("openai", api_key)
+    if not resolved_key:
+        raise HTTPException(status_code=400, detail="OpenAI API key required for Whisper. Set OPENAI_API_KEY in backend/.env or provide it in Settings.")
+
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=resolved_key)
+
+    audio_bytes = await audio.read()
+    raw_mime = (audio.content_type or "audio/webm").split(";")[0].strip()
+    _mime_to_ext = {
+        "audio/webm": "webm",
+        "audio/ogg": "ogg",
+        "audio/wav": "wav",
+        "audio/mp4": "mp4",
+        "audio/mpeg": "mp3",
+        "audio/flac": "flac",
+    }
+    ext = _mime_to_ext.get(raw_mime, "webm")
+    filename = f"audio.{ext}"
+
+    kwargs: dict = dict(
+        model="gpt-4o-transcribe",
+        file=(filename, audio_bytes, raw_mime),
+        language=language,
+    )
+    # 세션 제목 + 키워드를 프롬프트로 전달 — 전문 용어 인식 향상
+    hint_parts = []
+    if session_title:
+        hint_parts.append(session_title)
+    if keywords:
+        hint_parts.append(keywords)
+    if hint_parts:
+        kwargs["prompt"] = ", ".join(hint_parts)
+
+    try:
+        response = await client.audio.transcriptions.create(**kwargs)
+        return {"text": response.text}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Whisper transcription failed: {exc}")
 
 
 @app.get("/sessions")
@@ -176,6 +239,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
     learning_agent: Optional[LearningAgent] = None
     obsidian_path: Optional[str] = None
+    # 개념 추출 빈도 조절: 충분한 텍스트가 쌓였을 때만 분석
+    _pending_text: str = ""
+    _ANALYSIS_THRESHOLD = 1500  # 1500자 누적 시 분석
 
     async def send(payload: dict):
         await websocket.send_text(json.dumps(payload))
@@ -226,6 +292,28 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     continue
 
                 learning_agent = LearningAgent(api_key=api_key, provider=provider, model=model)
+                learning_agent.build_agent(session_id, session_service, send)
+
+                # 기존 세션이 있으면 에이전트에 이전 맥락 주입 (이어 녹음 지원)
+                session_data = session_service.get_session(session_id)
+                if session_data:
+                    prior_transcript = session_data.get("transcript", "").strip()
+                    prior_concepts = session_data.get("concepts", [])
+                    if prior_transcript or prior_concepts:
+                        concepts_str = (
+                            "\n".join(f"- {c['name']}: {c.get('definition','')}" for c in prior_concepts)
+                            or "없음"
+                        )
+                        await learning_agent.prime_history(
+                            transcript=prior_transcript,
+                            concepts_str=concepts_str,
+                        )
+                        await send({
+                            "type": "session_restored",
+                            "transcript": prior_transcript,
+                            "concepts": prior_concepts,
+                        })
+
                 await send({"type": "status", "message": f"Session '{title}' started"})
 
             # ------------------------------------------------------------------
@@ -246,33 +334,19 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                 session_service.add_transcript_chunk(session_id, text, is_final)
 
-                # Only analyze on final chunks to avoid excess API calls
+                # 누적 텍스트가 임계값을 넘으면 에이전트 루프 실행
                 if is_final and text.strip():
+                    _pending_text += " " + text.strip()
+
+                if is_final and len(_pending_text) >= _ANALYSIS_THRESHOLD:
+                    batch = _pending_text.strip()
+                    _pending_text = ""
                     try:
-                        # Re-fetch to get updated transcript
-                        session = session_service.get_session(session_id)
-                        analysis = await learning_agent.analyze_transcript_chunk(text, session)
-
-                        # Persist new concepts
-                        for concept in analysis.get("concepts", []):
-                            session_service.add_concept(session_id, concept)
-
-                        # Track confusion
-                        if analysis.get("confusion_detected"):
-                            notes = analysis.get("notes", "")
-                            if notes:
-                                session = session_service.get_session(session_id)
-                                if notes not in session["confusion_points"]:
-                                    session["confusion_points"].append(notes)
-
-                        # Fetch updated session for response
-                        session = session_service.get_session(session_id)
-                        await send({
-                            "type": "concept_update",
-                            "concepts": session["concepts"],
-                        })
+                        # deepagents 루프 실행 — 도구 호출이 사이드 이펙트로 처리됨
+                        # (add_concept → concept_update WS, send_message → agent_proactive WS)
+                        await learning_agent.process_transcript(batch)
                     except Exception as exc:
-                        await send({"type": "error", "message": f"Transcript analysis failed: {exc}"})
+                        await send({"type": "error", "message": f"분석 실패: {exc}"})
 
             # ------------------------------------------------------------------
             # question
@@ -293,12 +367,18 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     continue
 
                 try:
+                    async def _on_keyword(kw: str) -> None:
+                        added = session_service.add_keyword(session_id, kw)
+                        if added:
+                            sess = session_service.get_session(session_id)
+                            await send({"type": "keyword_added", "keyword": kw, "keywords": sess.get("keywords", [])})
+
                     full_answer = ""
-                    async for chunk in learning_agent.stream_answer_question(question_text, session):
+                    async for chunk in learning_agent.stream_answer_question(question_text, session, on_keyword=_on_keyword):
                         full_answer += chunk
                         await send({
                             "type": "agent_response",
-                            "text": full_answer,   # send accumulated text, not just the delta
+                            "text": full_answer,
                             "streaming": True,
                         })
 
@@ -312,17 +392,49 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     # Persist the Q&A
                     session_service.add_user_question(session_id, question_text, full_answer)
 
+                    # 사용자 질문에서 혼동 감지 → confusion_points 자동 기록
+                    if _is_confusion(question_text):
+                        sess = session_service.get_session(session_id)
+                        if sess and question_text not in sess.get("confusion_points", []):
+                            sess["confusion_points"].append(question_text)
+                            session_service._save(session_id)
+                            await send({"type": "confusion_noted", "description": question_text})
+
                 except Exception as exc:
                     await send({"type": "error", "message": f"Question answering failed: {exc}"})
+
+            # ------------------------------------------------------------------
+            # add_keyword (UI에서 직접 입력)
+            # ------------------------------------------------------------------
+            elif msg_type == "add_keyword":
+                kw = message.get("keyword", "").strip()
+                if kw:
+                    added = session_service.add_keyword(session_id, kw)
+                    if added:
+                        sess = session_service.get_session(session_id)
+                        await send({"type": "keyword_added", "keyword": kw, "keywords": sess.get("keywords", [])})
 
             # ------------------------------------------------------------------
             # understanding_check
             # ------------------------------------------------------------------
             elif msg_type == "understanding_check":
-                level = message.get("level")
-                level_map = {1: "understood", 2: "unclear", 3: "confused"}
-                label = level_map.get(level, "unknown")
-                await send({"type": "status", "message": f"Understanding level recorded: {label}"})
+                level = message.get("level")  # 1=모르겠음, 2=애매함, 3=이해됨
+                session = session_service.get_session(session_id)
+
+                if level == 3:
+                    await send({"type": "understanding_feedback", "level": 3,
+                                "message": "✅ 이해됨으로 기록했습니다."})
+
+                elif level in (1, 2) and session:
+                    # 최근 전사 내용을 confusion point로 기록
+                    recent = session.get("transcript", "")[-300:].strip()
+                    label = "잘 모르겠음" if level == 1 else "애매함"
+                    point = f"[{label}] {recent}" if recent else label
+                    if point not in session.setdefault("confusion_points", []):
+                        session["confusion_points"].append(point)
+                        session_service._save(session_id)
+                    msg = "❓ 모르겠는 부분으로 기록했습니다." if level == 1 else "🤔 애매한 부분으로 기록했습니다."
+                    await send({"type": "understanding_feedback", "level": level, "message": msg})
 
             # ------------------------------------------------------------------
             # session_end

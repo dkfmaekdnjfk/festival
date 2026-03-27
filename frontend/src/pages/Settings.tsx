@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Eye, EyeOff, Save, Check } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
-import { PROVIDER_LABELS, DEFAULT_MODELS, API_KEY_PLACEHOLDERS, type Provider } from '../store/appStore'
+import { PROVIDER_LABELS, DEFAULT_MODELS, API_KEY_PLACEHOLDERS, type Provider, type TranscriptionMethod } from '../store/appStore'
 import { getEnvKeys } from '../lib/api'
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
@@ -27,6 +27,9 @@ export function Settings() {
   const [localAutoSave, setLocalAutoSave] = useState(settings.autoSave)
   const [localLanguage, setLocalLanguage] = useState(settings.language)
   const [localSessionType, setLocalSessionType] = useState(settings.defaultSessionType)
+  const [localTranscriptionMethod, setLocalTranscriptionMethod] = useState<TranscriptionMethod>(settings.transcriptionMethod ?? 'webspeech')
+  const [localWhisperApiKey, setLocalWhisperApiKey] = useState(settings.whisperApiKey ?? '')
+  const [showWhisperKey, setShowWhisperKey] = useState(false)
   const [envKeys, setEnvKeys] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
@@ -48,6 +51,8 @@ export function Settings() {
       autoSave: localAutoSave,
       language: localLanguage,
       defaultSessionType: localSessionType,
+      transcriptionMethod: localTranscriptionMethod,
+      whisperApiKey: localWhisperApiKey,
     })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -173,6 +178,67 @@ export function Settings() {
               </div>
               <span className="text-sm text-text">세션 종료 시 자동 저장</span>
             </label>
+          </div>
+        </section>
+
+        {/* Transcription */}
+        <section className="mb-8 p-5 rounded-xl border border-border bg-surface">
+          <SectionHeader
+            title="전사 방식"
+            description="강의 음성을 텍스트로 변환하는 방식을 선택합니다."
+          />
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { value: 'webspeech', label: 'Web Speech API', desc: '브라우저 내장 · 무료 · Chrome/Edge 전용' },
+                { value: 'whisper', label: 'Whisper (OpenAI)', desc: '높은 정확도 · 한국어 강세 · API 비용 발생' },
+              ] as { value: TranscriptionMethod; label: string; desc: string }[]).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setLocalTranscriptionMethod(opt.value)}
+                  className={`px-3 py-3 rounded-lg text-left border transition-colors ${
+                    localTranscriptionMethod === opt.value
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-surface-elevated text-text-muted hover:border-border/80 hover:text-text'
+                  }`}
+                >
+                  <p className="text-sm font-medium">{opt.label}</p>
+                  <p className="text-[11px] mt-0.5 opacity-70">{opt.desc}</p>
+                </button>
+              ))}
+            </div>
+
+            {localTranscriptionMethod === 'whisper' && (
+              <label className="block">
+                <span className="text-xs text-text-muted mb-1.5 flex items-center gap-2">
+                  OpenAI API Key (Whisper 전용)
+                  {envKeys['openai'] && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+                      <Check size={9} />
+                      환경변수 설정됨
+                    </span>
+                  )}
+                </span>
+                <div className="relative">
+                  <input
+                    type={showWhisperKey ? 'text' : 'password'}
+                    value={localWhisperApiKey}
+                    onChange={(e) => setLocalWhisperApiKey(e.target.value)}
+                    placeholder={envKeys['openai'] ? '환경변수 키 사용 중 (직접 입력 시 우선 적용)' : 'sk-...'}
+                    className="w-full bg-surface-elevated border border-border rounded-lg px-3 py-2 text-sm text-text placeholder-text-subtle focus:outline-none focus:border-primary/60 transition-colors pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowWhisperKey((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors"
+                  >
+                    {showWhisperKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-text-subtle">비워두면 백엔드의 OPENAI_API_KEY 환경변수를 사용합니다.</p>
+              </label>
+            )}
           </div>
         </section>
 

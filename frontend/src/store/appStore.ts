@@ -24,6 +24,8 @@ export const API_KEY_PLACEHOLDERS: Record<Provider, string> = {
   gemini: 'AI...',
 }
 
+export type TranscriptionMethod = 'webspeech' | 'whisper'
+
 export interface Settings {
   provider: Provider
   apiKey: string
@@ -32,6 +34,8 @@ export interface Settings {
   language: 'ko' | 'en'
   autoSave: boolean
   defaultSessionType: string
+  transcriptionMethod: TranscriptionMethod
+  whisperApiKey: string  // OpenAI key for Whisper (falls back to OPENAI_API_KEY env)
 }
 
 export interface Concept {
@@ -51,6 +55,8 @@ export interface Message {
   text: string
   timestamp: string
   streaming?: boolean
+  proactive?: boolean   // 에이전트가 능동적으로 보낸 메시지
+  confusion?: boolean  // 혼동 포인트 알림
 }
 
 export interface SessionSummary {
@@ -78,6 +84,7 @@ interface AppStore {
   sessionStartTime: number | null   // Date.now() when session started
   interimTranscript: string
   concepts: Concept[]
+  keywords: string[]
   messages: Message[]
   summary: SessionSummary | null
   obsidianPath: string | null
@@ -91,6 +98,8 @@ interface AppStore {
   endSession: () => void
   appendTranscript: (text: string, isFinal: boolean) => void
   addConcepts: (concepts: Concept[]) => void
+  removeConcept: (name: string) => void
+  setKeywords: (kws: string[]) => void
   addMessage: (msg: Message) => void
   updateLastMessage: (text: string) => void
   setSummary: (s: SessionSummary) => void
@@ -109,6 +118,8 @@ const defaultSettings: Settings = {
   language: 'ko',
   autoSave: false,
   defaultSessionType: '수업',
+  transcriptionMethod: 'webspeech' as TranscriptionMethod,
+  whisperApiKey: '',
 }
 
 export const useAppStore = create<AppStore>()(
@@ -132,6 +143,7 @@ export const useAppStore = create<AppStore>()(
       sessionStartTime: null,
       interimTranscript: '',
       concepts: [],
+      keywords: [],
       messages: [],
       summary: null,
       obsidianPath: null,
@@ -190,6 +202,11 @@ export const useAppStore = create<AppStore>()(
           return { concepts: Array.from(existing.values()) }
         }),
 
+      removeConcept: (name) =>
+        set((state) => ({ concepts: state.concepts.filter((c) => c.name !== name) })),
+
+      setKeywords: (kws) => set({ keywords: kws }),
+
       addMessage: (msg) =>
         set((state) => ({ messages: [...state.messages, msg] })),
 
@@ -245,6 +262,7 @@ export const useAppStore = create<AppStore>()(
           sessionStartTime: null,
           interimTranscript: '',
           concepts: [],
+          keywords: [],
           messages: [],
           summary: null,
           obsidianPath: null,

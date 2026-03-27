@@ -56,6 +56,7 @@ class SessionService:
             "transcript": "",
             "transcript_chunks": [],
             "concepts": [],
+            "keywords": [],
             "user_questions": [],
             "confusion_points": [],
             "summary": None,
@@ -93,6 +94,18 @@ class SessionService:
         if name and name.lower() not in existing_names:
             session["concepts"].append({**concept, "first_seen": datetime.now().isoformat()})
             self._save(session_id)
+
+    def add_keyword(self, session_id: str, keyword: str) -> bool:
+        """Returns True if keyword was newly added."""
+        session = self.sessions.get(session_id)
+        if session is None:
+            return False
+        kw = keyword.strip()
+        if not kw or kw in session.setdefault("keywords", []):
+            return False
+        session["keywords"].append(kw)
+        self._save(session_id)
+        return True
 
     def add_user_question(self, session_id: str, question: str, answer: str) -> None:
         session = self.sessions.get(session_id)

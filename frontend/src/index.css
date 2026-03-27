@@ -6,6 +6,21 @@
   box-sizing: border-box;
 }
 
+/* prose 색상이 테마 색상을 덮어쓰지 않도록 */
+.prose {
+  --tw-prose-body: #e5e5e5;
+  --tw-prose-headings: #e5e5e5;
+  --tw-prose-bold: #e5e5e5;
+  --tw-prose-code: #e5e5e5;
+  --tw-prose-pre-bg: #1a1a1a;
+  color: inherit;
+}
+.prose p { margin: 0; }
+.prose p + p { margin-top: 0.4em; }
+.prose ul, .prose ol { margin: 0.3em 0; padding-left: 1.2em; }
+.prose li { margin: 0; }
+.prose code { background: #1e1e2e; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.85em; }
+
 body {
   background: #0a0a0a;
   color: #e5e5e5;
